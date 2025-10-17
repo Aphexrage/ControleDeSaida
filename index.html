@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calendário de Saída - Colaboradores</title>
+
+  <!-- Bootstrap 5 CSS (para modal e estilo) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- FullCalendar v6 (core + dayGrid + interaction for drag/drop) -->
+  <link href="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/index.global.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.8/index.global.min.css" rel="stylesheet"/>
+
+  <style>
+    /* Estilo corporativo moderno */
+    :root{
+      --brand: #0b6cf5;
+      --muted: #6c757d;
+      --bg: #f7f9fc;
+      --card: #ffffff;
+    }
+    body{
+      background: var(--bg);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color: #222;
+      padding: 28px;
+    }
+    .app-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+    }
+    .brand {
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .logo {
+      width:48px;
+      height:48px;
+      background: linear-gradient(135deg, var(--brand), #5aa1ff);
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:white;
+      font-weight:700;
+      box-shadow: 0 6px 18px rgba(11,108,245,0.14);
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 6px 20px rgba(16,24,40,0.05);
+    }
+    .controls { display:flex; gap:8px; align-items:center; }
+    .muted { color: var(--muted); font-size:0.9rem; }
+
+    /* Calendar container */
+    #calendar {
+      max-width: 1000px;
+      margin: 12px auto;
+    }
+
+    /* Small helpers */
+    .legend {
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-top:8px;
+    }
+    .legend .item {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      font-size:0.9rem;
+      color:var(--muted);
+    }
+    .color-dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
+    @media (max-width:800px){
+      #calendar { padding: 8px; }
+      .app-header { flex-direction:column; align-items:flex-start; gap:10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-header">
+    <div class="brand">
+      <div class="logo">CS</div>
+      <div>
+        <h4 style="margin:0">Calendário de Saída - Colaboradores</h4>
+        <div class="muted">Adicione, edite ou remova as datas de saída dos colaboradores.</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="btnNewEvent" class="btn btn-outline-primary btn-sm">Nova saída</button>
+      <button id="btnExport" class="btn btn-outline-secondary btn-sm">Exportar (.json)</button>
+      <input id="importFile" type="file" accept=".json" class="form-control form-control-sm" style="width:0.1px; padding:0; overflow:hidden; position:relative;"/>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="calendar"></div>
+
+    <div class="legend">
+      <div class="item"><span class="color-dot" style="background:#0b6cf5"></span>Saída programada</div>
+      <div class="item"><span class="color-dot" style="background:#f59e0b"></span>Saída urgência</div>
+      <div class="item"><span class="color-dot" style="background:#10b981"></span>Outro (observação)</div>
+    </div>
+  </div>
+
+  <!-- Modal (Adicionar / Editar evento) -->
+  <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form id="eventForm">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalTitle">Nova saída</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="eventId" />
+            <div class="mb-3">
+              <label for="employeeName" class="form-label">Colaborador</label>
+              <input type="text" id="employeeName" class="form-control" placeholder="Nome do colaborador" required>
+            </div>
+            <div class="mb-3 row g-2">
+              <div class="col-6">
+                <label for="startDate" class="form-label">Data</label>
+                <input type="date" id="startDate" class="form-control" required>
+              </div>
+              <div class="col-6">
+                <label for="type" class="form-label">Tipo</label>
+                <select id="type" class="form-select">
+                  <option value="programada">Saída programada</option>
+                  <option value="urgencia">Saída - urgência</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="notes" class="form-label">Observações</label>
+              <textarea id="notes" class="form-control" rows="2" placeholder="Motivo, contato, observações..."></textarea>
+            </div>
+            <div class="form-text muted">Arraste os eventos no calendário para mudar a data. Clique para editar/excluir.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="btnDelete" class="btn btn-outline-danger me-auto" style="display:none">Excluir</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- FullCalendar (global builds) -->
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.8/index.global.min.js"></script>
+
+  <script>
+    // ===== Utilitários =====
+    const STORAGE_KEY = 'calendario_saidas_colaboradores_v1';
+
+    function uid() {
+      return String(Date.now().toString(36) + Math.random().toString(36).slice(2,8)).replace('.', '');
+    }
+
+    function loadEventsFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return [];
+        return JSON.parse(raw);
+      } catch (e) {
+        console.error('Erro ao carregar eventos:', e);
+        return [];
+      }
+    }
+
+    function saveEventsToStorage(events) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    }
+
+    function mapToFCEvent(e){
+      // Converte nosso objeto para formato do FullCalendar
+      return {
+        id: e.id,
+        title: e.title,
+        start: e.start,
+        allDay: true,
+        extendedProps: {
+          type: e.type,
+          notes: e.notes
+        },
+        backgroundColor: colorForType(e.type),
+        borderColor: colorForType(e.type),
+        textColor: '#fff'
+      };
+    }
+
+    function colorForType(type){
+      switch(type){
+        case 'urgencia': return '#f59e0b';
+        case 'outro': return '#10b981';
+        default: return '#0b6cf5';
+      }
+    }
+
+    // ===== Inicialização do calendário =====
+    document.addEventListener('DOMContentLoaded', function() {
+      const stored = loadEventsFromStorage();
+
+      // Cria instância do FullCalendar
+      const calendarEl = document.getElementById('calendar');
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        dayMaxEventRows: true,
+        selectable: true,
+        editable: true,
+        headerToolbar: {
+          left: 'title',
+          center: '',
+          right: 'dayGridMonth,dayGridWeek,dayGridDay today prev,next'
+        },
+        dateClick: function(info) {
+          // Abrir modal para criar evento na data clicada
+          openModalForDate(info.dateStr);
+        },
+        eventClick: function(info) {
+          // Editar evento
+          openModalForEvent(info.event);
+        },
+        eventDrop: function(info) {
+          // Evento arrastado para outra data - atualizar storage
+          const id = info.event.id;
+          const events = loadEventsFromStorage();
+          const ev = events.find(x => x.id === id);
+          if (ev) {
+            // info.event.start pode ter hora; mantemos apenas YYYY-MM-DD
+            ev.start = info.event.startStr.split('T')[0];
+            saveEventsToStorage(events);
+          }
+        },
+        events: stored.map(mapToFCEvent),
+        dayMaxEvents: true,
+        locale: 'pt-br'
+      });
+
+      calendar.render();
+
+      // ===== Modal management =====
+      const modalEl = document.getElementById('eventModal');
+      const bsModal = new bootstrap.Modal(modalEl, { backdrop: 'static' });
+      const form = document.getElementById('eventForm');
+
+      const fieldId = document.getElementById('eventId');
+      const fieldName = document.getElementById('employeeName');
+      const fieldDate = document.getElementById('startDate');
+      const fieldType = document.getElementById('type');
+      const fieldNotes = document.getElementById('notes');
+      const btnDelete = document.getElementById('btnDelete');
+      const modalTitle = document.getElementById('modalTitle');
+
+      // Abrir modal para data nova
+      function openModalForDate(dateStr){
+        fieldId.value = '';
+        fieldName.value = '';
+        fieldDate.value = dateStr;
+        fieldType.value = 'programada';
+        fieldNotes.value = '';
+        btnDelete.style.display = 'none';
+        modalTitle.textContent = 'Nova saída';
+        bsModal.show();
+      }
+
+      // Abrir modal para editar um evento existente (FullCalendar Event)
+      function openModalForEvent(event){
+        const id = event.id;
+        const storedEvt = loadEventsFromStorage().find(x => x.id === id);
+        if (!storedEvt) return alert('Evento não encontrado no armazenamento local.');
+
+        fieldId.value = storedEvt.id;
+        fieldName.value = storedEvt.title;
+        fieldDate.value = storedEvt.start;
+        fieldType.value = storedEvt.type || 'programada';
+        fieldNotes.value = storedEvt.notes || '';
+        btnDelete.style.display = 'inline-block';
+        modalTitle.textContent = 'Editar saída';
+        bsModal.show();
+      }
+
+      // Criar novo evento programaticamente (botão)
+      document.getElementById('btnNewEvent').addEventListener('click', () => {
+        // default date => hoje
+        const today = new Date().toISOString().slice(0,10);
+        openModalForDate(today);
+      });
+
+      // Deletar evento
+      btnDelete.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const id = fieldId.value;
+        if (!id) return;
+        if (!confirm('Tem certeza que deseja excluir essa saída?')) return;
+        let events = loadEventsFromStorage();
+        events = events.filter(x => x.id !== id);
+        saveEventsToStorage(events);
+        // remover do calendário
+        const fcEvent = calendar.getEventById(id);
+        if (fcEvent) fcEvent.remove();
+        bsModal.hide();
+      });
+
+      // Salvar/atualizar evento (submit do form)
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = fieldId.value || uid();
+        const title = fieldName.value.trim();
+        const start = fieldDate.value;
+        const type = fieldType.value;
+        const notes = fieldNotes.value.trim();
+
+        if (!title || !start) {
+          alert('Preencha nome do colaborador e a data.');
+          return;
+        }
+
+        // Atualizar storage
+        let events = loadEventsFromStorage();
+        const existingIndex = events.findIndex(x => x.id === id);
+
+        const obj = { id, title, start, type, notes };
+
+        if (existingIndex >= 0) {
+          events[existingIndex] = obj;
+        } else {
+          events.push(obj);
+        }
+
+        saveEventsToStorage(events);
+
+        // Atualizar no FullCalendar (remover e adicionar)
+        const existingFC = calendar.getEventById(id);
+        if (existingFC) existingFC.remove();
+        calendar.addEvent(mapToFCEvent(obj));
+
+        bsModal.hide();
+      });
+
+      // Exportar JSON (download)
+      document.getElementById('btnExport').addEventListener('click', () => {
+        const events = loadEventsFromStorage();
+        const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'calendario_saidas.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+
+      // Importar JSON
+      const importFile = document.getElementById('importFile');
+      // Abre o seletor quando clicar no botão Export (re-uses that UI slot)
+      document.getElementById('btnExport').insertAdjacentHTML('afterend', '<button id="btnImport" class="btn btn-outline-secondary btn-sm ms-2">Importar (.json)</button>');
+      document.getElementById('btnImport').addEventListener('click', () => importFile.click());
+
+      importFile.addEventListener('change', (ev) => {
+        const file = ev.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e){
+          try {
+            const imported = JSON.parse(e.target.result);
+            if (!Array.isArray(imported)) throw new Error('Arquivo inválido');
+            // validar formato mínimo
+            const cleaned = imported.map(it => ({
+              id: it.id || uid(),
+              title: it.title || 'Sem nome',
+              start: (it.start || (it.date || '')).slice(0,10),
+              type: it.type || 'programada',
+              notes: it.notes || ''
+            }));
+            saveEventsToStorage(cleaned);
+            // re-render calendar
+            calendar.removeAllEvents();
+            cleaned.forEach(ev => calendar.addEvent(mapToFCEvent(ev)));
+            alert('Importação concluída.');
+          } catch(err) {
+            console.error(err);
+            alert('Erro ao importar. Certifique-se de usar um JSON válido (array de eventos).');
+          }
+        };
+        reader.readAsText(file);
+        // reset input
+        ev.target.value = '';
+      });
+
+    }); // DOMContentLoaded end
+  </script>
+</body>
+</html>
